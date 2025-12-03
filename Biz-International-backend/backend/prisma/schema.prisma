@@ -1,0 +1,91 @@
+// Prisma schema for Biz International
+// See docs: https://pris.ly/d/prisma-schema
+
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String
+  createdAt DateTime @default(now())
+
+  projects  Project[]  @relation("ManagerProjects")
+  tasks     Task[]     @relation("UserTasks")
+}
+
+model Project {
+  id         String   @id @default(uuid())
+  name       String
+  location   String?
+  createdAt  DateTime @default(now())
+  managerId  String?
+  manager    User?    @relation("ManagerProjects", fields: [managerId], references: [id])
+
+  floors     Floor[]
+}
+
+model Floor {
+  id        String   @id @default(uuid())
+  number    Int
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+
+  rooms     Room[]
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  name      String
+  floorId   String
+  floor     Floor    @relation(fields: [floorId], references: [id])
+
+  doorFrames DoorFrame[]
+}
+
+model DoorFrame {
+  id        String   @id @default(uuid())
+  status    String
+  notes     String?
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id])
+
+  tasks     Task[]
+}
+
+model Task {
+  id           String    @id @default(uuid())
+  title        String
+  status       String
+  doorFrameId  String
+  assignedToId String?
+
+  doorFrame    DoorFrame @relation(fields: [doorFrameId], references: [id])
+  assignedTo   User?     @relation("UserTasks", fields: [assignedToId], references: [id])
+  payments     Payment[]
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  amount    Float
+  status    String
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Rating {
+  id          String   @id @default(uuid())
+  rating      Int
+  comment     String?
+  carpenterId String
+  projectId   String
+}
