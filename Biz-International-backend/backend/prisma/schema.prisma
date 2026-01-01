@@ -1,6 +1,3 @@
-// Prisma schema for Biz International
-// See docs: https://pris.ly/d/prisma-schema
-
 // prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
@@ -10,82 +7,402 @@ datasource db {
   provider = "postgresql"
 }
 
+/**
+ * Roles: extended so we can assign carpenters and service managers.
+ */
+enum Role {
+  OWNER
+  MANAGER
+  SUPERVISOR
+  ACCOUNTS
+  DISPATCHER
+}
+
+
+/**
+ * Generic statuses and enums
+ */
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+/**
+ * Installation step enums for consistent percentages and UI mapping.
+ * These reflect the PDF statuses for Frame and Door steps.
+ */
+enum FrameStep {
+  FIRST_JAAM
+  SECOND_JAAM
+  PUTTI_GASKET
+  HANDOVER
+  RETENTION
+}
+
+enum DoorStep {
+  DOOR_FITTING
+  SCREW_HINGES
+  LOCK
+  OTHER_HW
+  HANDOVER
+  RETENTION
+}
+
+/**
+ * Master/lookup tables for sizes and materials
+ */
+model DoorSizeMaster {
+  id        String   @id @default(uuid())
+  name      String // e.g., "Main Door - Type A"
+  type      String?
+  height    Int
+  width     Int
+  createdAt DateTime @default(now())
+}
+
+model FrameSizeMaster {
+  id        String   @id @default(uuid())
+  name      String
+  type      String?
+  height    Int
+  width     Int
+  wallThick Int?
+  createdAt DateTime @default(now())
+}
+
+model Material {
+  id        String   @id @default(uuid())
+  name      String
+  unit      String? // e.g., pieces / meters / liters
+  createdAt DateTime @default(now())
+
+  materialRequirements MaterialRequirement[]
+}
+
+/**
+ * Existing models (keeps your structure) with small relation fixes
+ */
 model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
   password  String
-  role      String
+  role      Role
   createdAt DateTime @default(now())
 
-  projects  Project[]  @relation("ManagerProjects")
-  tasks     Task[]     @relation("UserTasks")
+  projects    Project[]    @relation("ManagerProjects")
+  tasks       Task[]       @relation("UserTasks")
+  attendances Attendance[]
+
+  carpentryAssignments CarpentryAssignment[]
+
+  projectSupervisors ProjectSupervisor[]
+
+  rooms Room[]
 }
 
 model Project {
-  id         String   @id @default(uuid())
-  name       String
-  location   String?
-  createdAt  DateTime @default(now())
-  managerId  String?
-  manager    User?    @relation("ManagerProjects", fields: [managerId], references: [id])
+  id        String   @id @default(uuid())
+  name      String
+  location  String?
+  createdAt DateTime @default(now())
+  managerId String?
+  manager   User?    @relation("ManagerProjects", fields: [managerId], references: [id])
 
   floors     Floor[]
+  flats      Flat[]
+  dispatches DispatchItem[]
+  materials  MaterialRequirement[]
+  ratings    Rating[]
+
+  carpentryAssignments CarpentryAssignment[]
+
+  projectSupervisors ProjectSupervisor[]
+  
+
 }
 
 model Floor {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   number    Int
   projectId String
-  project   Project  @relation(fields: [projectId], references: [id])
+  project   Project @relation(fields: [projectId], references: [id])
 
-  rooms     Room[]
+  rooms Room[]
 }
 
 model Room {
-  id        String   @id @default(uuid())
-  name      String
-  floorId   String
-  floor     Floor    @relation(fields: [floorId], references: [id])
+  id          String   @id @default(uuid())
+  name        String
+  roomNumber  String
+  roomType    String?
+  length      Float?
+  width       Float?
+  doors       Int?
+  windows     Int?
+  notes       String?
+  editableUntil DateTime
+
+  floorId     String
+  floor       Floor    @relation(fields: [floorId], references: [id])
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  locked      Boolean  @default(false)
+
+  doorFrames  DoorFrame[]
+}
+
+
+
+/**
+ * DoorFrame kept (could represent an installed frame in a room)
+ */
+model DoorFrame {
+  id     String  @id @default(uuid())
+  status String
+  notes  String?
+  roomId String
+  room   Room    @relation(fields: [roomId], references: [id])
+
+  tasks   Task[]
+  // link to the actual Door/Frame record if needed
+  door    Door?   @relation(fields: [doorId], references: [id])
+  doorId  String?
+  frame   Frame?  @relation(fields: [frameId], references: [id])
+  frameId String?
+}
+
+/**
+ * Core task/payment models (kept with refined enums)
+ */
+model Task {
+  id           String     @id @default(uuid())
+  title        String
+  status       TaskStatus @default(PENDING)
+  doorFrameId  String
+  assignedToId String?
+  createdAt    DateTime   @default(now())
+
+  doorFrame  DoorFrame @relation(fields: [doorFrameId], references: [id])
+  assignedTo User?     @relation("UserTasks", fields: [assignedToId], references: [id])
+  payments   Payment[]
+}
+
+model Payment {
+  id        String        @id @default(uuid())
+  amount    Float
+  status    PaymentStatus @default(PENDING)
+  taskId    String
+  task      Task          @relation(fields: [taskId], references: [id])
+  createdAt DateTime      @default(now())
+}
+
+/**
+ * New models introduced to satisfy BIZ.pdf requirements
+ */
+
+/**
+ * Flats: we introduce Flat as a primary unit (PDF: Flat per floor, types, flat numbers)
+ */
+model Flat {
+  id          String  @id @default(uuid())
+  projectId   String
+  floorNumber Int
+  flatNumber  String
+  flatType    String?
+  isRefuge    Boolean @default(false)
+
+  project              Project              @relation(fields: [projectId], references: [id])
+  doors                Door[]
+  frames               Frame[]
+  installationStatuses InstallationStatus[]
+  installationErrors   InstallationError[]
+
+  // single definition of materialRequirements (removed duplicate)
+  materialRequirements MaterialRequirement[]
+}
+
+/**
+ * Door & Frame details (sizes, types, totals)
+ */
+model Door {
+  id        String         @id @default(uuid())
+  flatId    String
+  type      String
+  height    Int
+  width     Int
+  hardware  HardwareItem[]
+  createdAt DateTime       @default(now())
+
+  flat Flat @relation(fields: [flatId], references: [id])
 
   doorFrames DoorFrame[]
 }
 
-model DoorFrame {
+model Frame {
   id        String   @id @default(uuid())
-  status    String
-  notes     String?
-  roomId    String
-  room      Room     @relation(fields: [roomId], references: [id])
-
-  tasks     Task[]
-}
-
-model Task {
-  id           String    @id @default(uuid())
-  title        String
-  status       String
-  doorFrameId  String
-  assignedToId String?
-
-  doorFrame    DoorFrame @relation(fields: [doorFrameId], references: [id])
-  assignedTo   User?     @relation("UserTasks", fields: [assignedToId], references: [id])
-  payments     Payment[]
-}
-
-model Payment {
-  id        String   @id @default(uuid())
-  amount    Float
-  status    String
-  taskId    String
-  task      Task     @relation(fields: [taskId], references: [id])
+  flatId    String
+  type      String
+  wallThick Int?
+  height    Int
+  width     Int
   createdAt DateTime @default(now())
+
+  flat Flat @relation(fields: [flatId], references: [id])
+
+  doorFrames DoorFrame[]
 }
 
+/**
+ * Hardware lists for each door
+ */
+model HardwareItem {
+  id       String @id @default(uuid())
+  doorId   String
+  name     String
+  quantity Int
+  door     Door   @relation(fields: [doorId], references: [id])
+}
+
+/**
+ * Carpenter entity and assignment (carpenter + charges)
+ */
+model Carpenter {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String?
+  chargePerUnit Float?
+  createdAt     DateTime @default(now())
+
+  // Ratings and assignments
+  ratings     Rating[]
+  assignments CarpentryAssignment[]
+}
+
+/**
+ * Link carpentry assignment to a flat/door/frame/task
+ */
+model CarpentryAssignment {
+  id          String   @id @default(uuid())
+  carpenterId String
+  projectId   String
+  flatId      String?
+  doorId      String?
+  frameId     String?
+  assignedAt  DateTime @default(now())
+  charge      Float?
+
+  carpenter Carpenter @relation(fields: [carpenterId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id])
+
+  users User[]
+}
+
+/**
+ * Dispatch item import / summary model
+ */
+model DispatchItem {
+  id        String   @id @default(uuid())
+  projectId String
+  date      DateTime
+  item      String
+  quantity  Int
+  colorCode String? // UI color mapping for date or status
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+}
+model ProjectSupervisor {
+  id           String   @id @default(uuid())
+  projectId    String
+  supervisorId String
+  assignedAt   DateTime @default(now())
+
+  project      Project @relation(fields: [projectId], references: [id])
+  supervisor   User    @relation(fields: [supervisorId], references: [id])
+}
+
+
+/**
+ * Installation status & errors for tracking % and checkboxes
+ */
+model InstallationStatus {
+  id         String   @id @default(uuid())
+  flatId     String
+  type       String // 'door' | 'frame'
+  stepEnum   String? // stores FrameStep or DoorStep enum values as string for flexible queries
+  stepIndex  Int? // helpful to order steps
+  isDone     Boolean  @default(false)
+  percentage Int? // store percent weight for step (optional)
+  updatedAt  DateTime @default(now())
+
+  flat Flat @relation(fields: [flatId], references: [id])
+}
+
+model InstallationError {
+  id         String   @id @default(uuid())
+  flatId     String
+  type       String // 'door' | 'frame'
+  error      String
+  notes      String?
+  reportedAt DateTime @default(now())
+
+  flat Flat @relation(fields: [flatId], references: [id])
+}
+
+/**
+ * Material requirement & dispatch tracking
+ */
+model MaterialRequirement {
+  id         String   @id @default(uuid())
+  projectId  String
+  flatId     String?
+  materialId String
+  required   Int
+  dispatched Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  project  Project  @relation(fields: [projectId], references: [id])
+  flat     Flat?    @relation(fields: [flatId], references: [id])
+  material Material @relation(fields: [materialId], references: [id])
+
+  @@map("material_requirements")
+}
+
+/**
+ * Ratings tied to carpenter and project
+ */
 model Rating {
   id          String   @id @default(uuid())
   rating      Int
   comment     String?
-  carpenterId String
-  projectId   String
+  carpenterId String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+
+  carpenter Carpenter? @relation(fields: [carpenterId], references: [id])
+  project   Project?   @relation(fields: [projectId], references: [id])
+}
+
+/**
+ * Attendance for service managers
+ */
+model Attendance {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime
+  isPresent Boolean  @default(true)
+  notes     String?
+
+  user User @relation(fields: [userId], references: [id])
 }
