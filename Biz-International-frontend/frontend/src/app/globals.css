@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================
+   CSS VARIABLES
+===================== */
+:root {
+  --color-surface-primary: #faf7f4;
+  --color-surface-secondary: #f5f0eb;
+  --color-surface-tertiary: #ffffff;
+
+  --color-text-primary: #1a1512;
+  --color-text-muted: #6b5f50;
+
+  --color-wood-400: #d4a574;
+  --color-wood-500: #b8860b;
+  --color-wood-600: #996515;
+
+  --color-sidebar-bg: #2d1e14;
+  --color-sidebar-text: #f5ede3;
+
+  --radius-wood: 8px;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+/* =====================
+   BASE STYLES
+===================== */
+@layer base {
+  body {
+    background-color: var(--color-surface-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+}
+
+/* =====================
+   SCROLLBAR (PURE CSS)
+===================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-wood-400);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-wood-500);
+}
